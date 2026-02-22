@@ -1,35 +1,56 @@
-version: '3.9'
-
 services:
   app:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+    command: sleep infinity
     volumes:
       - ..:/workspace:cached
-    command: sleep infinity
+      - pnpm_store:/home/developer/.local/share/pnpm/store
+      - uv_cache:/home/developer/.cache/uv
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/app_db
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/quality_hub
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      GITLAB_BASE_URL: https://gitlab.com
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/v1
+      PYTHONPATH: /workspace/src/app/api/src
     depends_on:
-      postgres:
+      db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
-  postgres:
+  db:
     image: postgres:16
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: app_db
+      POSTGRES_DB: quality_hub
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d app_db -h localhost']
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d quality_hub -h localhost']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 20
 
 volumes:
   postgres_data:
+  pnpm_store:
+  uv_cache:

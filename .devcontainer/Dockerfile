@@ -5,7 +5,18 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    sudo git zsh curl wget ca-certificates postgresql-client \
+    sudo \
+    git \
+    zsh \
+    curl \
+    wget \
+    ca-certificates \
+    unzip \
+    jq \
+    make \
+    build-essential \
+    postgresql-client \
+    redis-tools \
   && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /usr/bin/zsh ${USER} \
@@ -17,7 +28,6 @@ ENV HOME=/home/${USER}
 ENV ZSH=${HOME}/.oh-my-zsh
 ENV ZSH_CUSTOM=${ZSH}/custom
 ENV PATH="${HOME}/.local/bin:${PATH}"
-
 WORKDIR ${HOME}
 
 ARG SPACESHIP_REMOTE=https://github.com/spaceship-prompt/spaceship-prompt.git
@@ -36,3 +46,5 @@ RUN set -eux; \
   curl -LsSf https://astral.sh/uv/install.sh | sh; \
   echo 'eval "$(uv generate-shell-completion zsh)"' >> ${HOME}/.zshrc; \
   echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ${HOME}/.zshrc
+
+WORKDIR /workspace

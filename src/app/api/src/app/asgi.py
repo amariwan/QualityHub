@@ -1,7 +1,5 @@
-from .views import app
+from __future__ import annotations
 
-"""
-Expose the FastAPI app instance for ASGI servers. Configure logging or crash reporting here if needed.
-"""
+from app.main import app
 
 __all__ = ["app"]

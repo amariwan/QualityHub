@@ -1,0 +1,85 @@
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/v1
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/quality_hub
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      GITLAB_BASE_URL: https://gitlab.com
+      SESSION_SECRET: local-session-secret
+      TOKEN_ENCRYPTION_KEY: local-token-key
+      API_CORS_ORIGINS: http://localhost:3000
+      PYTHONPATH: /app/src/app/api/src
+    command: ['/bin/bash', '-lc', './infra/docker/api-entrypoint.sh']
+    ports:
+      - '8000:8000'
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/quality_hub
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      GITLAB_BASE_URL: https://gitlab.com
+      SESSION_SECRET: local-session-secret
+      TOKEN_ENCRYPTION_KEY: local-token-key
+      PYTHONPATH: /app/src/app/api/src
+    command: ['/bin/bash', '-lc', './infra/docker/worker-entrypoint.sh']
+    depends_on:
+      - api
+
+  beat:
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/quality_hub
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      GITLAB_BASE_URL: https://gitlab.com
+      SESSION_SECRET: local-session-secret
+      TOKEN_ENCRYPTION_KEY: local-token-key
+      PYTHONPATH: /app/src/app/api/src
+    command: ['/bin/bash', '-lc', './infra/docker/beat-entrypoint.sh']
+    depends_on:
+      - worker
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: quality_hub
+    ports:
+      - '5432:5432'
+    volumes:
+      - quality_hub_db:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+
+volumes:
+  quality_hub_db:

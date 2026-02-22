@@ -5,11 +5,19 @@ readme = "README.md"
 requires-python = "==3.13.*"
 # only include packages that are actually imported or required at runtime
 dependencies = [
+    "alembic>=1.14.1",
     "asyncpg>=0.30.0",
+    "cryptography>=45.0.0",
     "fastapi==0.115.4",
+    "httpx>=0.28.0",
+    "itsdangerous>=2.2.0",
+    "kubernetes>=32.0.0",
     "pydantic-settings>=2.10.1",
+    "python-multipart>=0.0.20",
     "sqlalchemy>=2.0.43",
     "pyjwt>=2.10.1",
+    "celery>=5.3",
+    "redis>=4.5",
 ]
 
 

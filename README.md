@@ -1,138 +1,195 @@
 # QualityHub
 
-Quality-Hub is a GitOps release-readiness and CI health dashboard for GitLab + Flux Kubernetes deployments.
+## 🧠 Use Cases
 
+QualityHub supports different organizational roles in assessing software quality and release readiness based on GitLab CI/CD data.
 
-## What this MVP includes
+### 🧑‍💼 Project Managers
 
-- FastAPI backend in `src/app/api`
-- Next.js dashboard integration under `/dashboard/quality-hub/*`
-- Token-based GitLab connection flow (`/auth/token`)
-- Project monitoring and sync (`/v1/projects/sync`)
-- Broken pipelines readiness query (`/v1/pipelines`)
-- Flux deployment status APIs (`/v1/deployments/status`)
-- Workspace entities: views, notes, watchlist, tags
-- Team and team member management APIs
-- Local Docker Compose stack (`infra/compose.yaml`) with web/api/worker/beat/gitlab/db/redis
+* Monitor current release status
+* Identify unstable projects
+* Track merge activity
+* Assess release risks
+* Compare pipeline stability over time
 
-## Local run (Docker Compose)
+---
 
-```bash
-docker compose -f infra/compose.yaml up --build
+### 🧪 QA Teams
+
+* Analyze failed pipelines
+* Validate quality gates
+* Monitor test and lint reports
+* Approve releases based on stability metrics
+
+---
+
+### 📈 Delivery Managers
+
+* Deployment frequency tracking
+* Lead time analysis
+* Failure rate monitoring
+* Cross-team release transparency
+
+---
+
+## 🔍 Example: Release Readiness Analysis
+
+Before a planned release, QualityHub can determine:
+
+* How many pipelines failed in the last 7 days?
+* Was a critical branch recently modified?
+* Are there merge requests without successful tests?
+* Is the current build stable enough for deployment?
+
+➡️ Result: **Release Readiness Score**
+
+---
+
+## 📊 Quality Metrics
+
+QualityHub calculates cross-project metrics based on GitLab data:
+
+| Metric               | Description                    |
+| -------------------- | ------------------------------ |
+| Pipeline Stability   | Build success rate             |
+| Deployment Frequency | Deployments per time period    |
+| Merge Activity       | Commits / MRs per branch       |
+| Failure Rate         | Ratio of failed pipelines      |
+| Lead Time            | Time from commit to deployment |
+| Test Success Ratio   | Automated test success rate    |
+
+---
+
+## 🧩 Data Aggregation
+
+QualityHub uses the GitLab REST API to collect:
+
+* Pipelines
+* Jobs
+* Merge Requests
+* Commits
+* Branches
+* Releases
+* Deployment Events
+
+This data is:
+
+1. Periodically synchronized
+2. Normalized
+3. Analyzed
+4. Transformed into project-specific quality indicators
+
+---
+
+## 🕓 Asynchronous Processing
+
+To decouple data collection from analysis, QualityHub uses:
+
+* **Celery Workers**
+* **Redis Queue**
+
+This enables:
+
+* Parallel synchronization of GitLab projects
+* Historical trend analysis
+* Metric computation without blocking the UI
+
+---
+
+## 🧭 Navigation Concept
+
+The dashboard is structured into the following views:
+
+* Project Overview
+* Pipeline Health
+* Deployment Timeline
+* Merge Activity
+* Failure Trends
+* Release Stability
+
+Each view provides an abstracted perspective on technical CI/CD data.
+
+---
+
+## 🗂️ Multi-Project Monitoring
+
+QualityHub supports:
+
+* Multiple GitLab groups
+* Multiple projects per group
+* Team assignment to projects
+* Cross-project quality comparisons
+
+➡️ Especially suitable for:
+
+* Program Management
+* Portfolio Monitoring
+* Delivery Governance
+
+---
+
+## 🔄 Data Flow
+
+```text
+GitLab API
+    ↓
+QualityHub Sync Worker
+    ↓
+Data Normalization Layer
+    ↓
+Quality Metrics Engine
+    ↓
+Dashboard UI
 ```
 
-Services:
+---
 
-- Web: `http://localhost:3000`
-- API: `http://localhost:8000`
-- GitLab (demo): `http://localhost:8929`
-- Postgres: `localhost:5432`
-- Redis: `localhost:6379`
+## ⚙️ Configuration
 
-Notes:
+To connect a GitLab project, the following is required:
 
-- First startup of GitLab can take several minutes.
-- GitLab CE typically needs at least ~4 GB RAM available for smooth startup.
-- Demo root account (first boot): user `root`, password `root12345`.
-- If the `gitlab_*` Docker volumes already exist, the password is whatever was set before.
+* GitLab Personal Access Token
+* Project ID
+* API Endpoint (Self-hosted or Cloud)
 
-## Required environment variables
+---
 
-Compose already defines defaults for local run. For manual backend run, copy:
+## 🧪 Example Configuration
 
-```bash
-cp src/app/api/.env.example src/app/api/.env.dev
+```env
+GITLAB_API_URL=https://gitlab.example.com/api/v4
+GITLAB_TOKEN=your_access_token
+SYNC_INTERVAL=300
 ```
 
-Key vars:
+---
 
-- `DATABASE_URL`
-- `CELERY_BROKER_URL`
-- `CELERY_RESULT_BACKEND`
-- `GITLAB_BASE_URL`
-- `SESSION_SECRET`
-- `TOKEN_ENCRYPTION_KEY`
-- `API_CORS_ORIGINS`
+## 📌 Objective
 
-## API quickstart
+QualityHub provides an abstracted quality perspective on CI/CD processes to:
 
-1. Open `http://localhost:3000/auth/token`
-2. Create a Personal Access Token in GitLab: `http://localhost:8929/-/profile/personal_access_tokens`
-3. In Quality-Hub, keep base URL `http://gitlab:8929` and enter your token
-4. Add monitored groups via:
-   - `POST /v1/user/monitored-groups`
-5. Trigger project sync:
-   - `POST /v1/projects/sync`
-6. Open portfolio:
-   - `http://localhost:3000/dashboard/quality-hub/portfolio`
+* Detect release risks early
+* Identify unstable projects
+* Improve deployment planning
+* Make software quality measurable
 
-## Cluster registration
+---
 
-Register clusters in DB via API:
+## 🏢 Application Scenarios
 
-`POST /v1/clusters`
+* Continuous Delivery Monitoring
+* Release Governance
+* QA Reporting
+* CI Stability Tracking
+* Delivery Risk Assessment
 
-```json
-{
-  "name": "onprem-cluster-a",
-  "kube_api": "https://kube-api.example.local",
-  "kube_context_ref": "onprem-cluster-a",
-  "kubeconfig_ref": "/kubeconfigs/onprem-a.config",
-  "active": true
-}
-```
+---
 
-## Monitored GitLab groups
+If you'd like, I can now add:
 
-Create monitored group by ID/path or URL:
+* **Why not GitLab Dashboard?**
+* **Comparison to native GitLab Insights**
+* **Management Value Proposition**
+* **Architecture Decision Records (ADR)**
 
-`POST /v1/user/monitored-groups`
-
-```json
-{
-  "group_url": "https://gitlab.com/my-org/platform"
-}
-```
-
-## Report uploads
-
-Upload report artifacts to pipeline records:
-
-`POST /v1/reports/upload` (multipart form)
-
-Fields:
-
-- `pipeline_id` (int)
-- `type` (`junit`, `sarif`, `lcov`, `cobertura`, `eslint`, `checkstyle`)
-- `file` (artifact)
-
-Example with `curl`:
-
-```bash
-curl -X POST \
-  -F "pipeline_id=123" \
-  -F "type=junit" \
-  -F "file=@junit.xml" \
-  http://localhost:8000/v1/reports/upload
-```
-
-## Manual backend run (without compose)
-
-```bash
-cd src/app/api
-uv run alembic upgrade head
-uv run uvicorn app.asgi:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Workers:
-
-```bash
-cd src/app/api
-uv run celery -A app.core.tasks.celery_app.celery_app worker -l info
-uv run celery -A app.core.tasks.beat_schedule.celery_app beat -l info
-```
-
-## Notes
-
-- This MVP uses token flow (not GitLab OAuth).
-- Kubernetes watch task is a production-oriented skeleton and must be extended with real cluster connectivity logic for live Flux event ingestion.
+These are 🔥 for internal stakeholder buy-in.

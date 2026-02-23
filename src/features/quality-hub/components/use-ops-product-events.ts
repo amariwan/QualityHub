@@ -30,6 +30,9 @@ export function useOpsProductEvents({
   const [eventActionWorking, setEventActionWorking] = useState(false);
   const [eventActionError, setEventActionError] = useState<string | null>(null);
   const autoTrackedRef = useRef<Record<string, boolean>>({});
+  const hadOpenIncidentsRef = useRef(false);
+  const hadFlakySignalsRef = useRef(false);
+  const hadSLOBreachRef = useRef(false);
 
   const { data: productEvents = [], mutate: mutateProductEvents } = useSWR(
     workspaceId === undefined
@@ -111,6 +114,14 @@ export function useOpsProductEvents({
   const unownedProjectCount =
     data?.ownership_heatmap.summary.unowned_projects ?? 0;
   const regressionCount = data?.trend_regressions.regressions.length ?? 0;
+  const flakyRegressionCount =
+    data?.trend_regressions.regressions.filter(
+      (item) =>
+        item.type === 'test_failures' || /flaky|test/i.test(item.reason || '')
+    ).length ?? 0;
+  const breachedSLOCount =
+    data?.slo_budgets.filter((item) => item.status === 'exhausted').length ?? 0;
+  const mttrHours = data?.dora_metrics.mttr_hours.value ?? null;
 
   const latestProductEventByName = useMemo(() => {
     const mapped = new Map<string, OpsProductEvent>();
@@ -140,6 +151,9 @@ export function useOpsProductEvents({
 
   useEffect(() => {
     autoTrackedRef.current = {};
+    hadOpenIncidentsRef.current = false;
+    hadFlakySignalsRef.current = false;
+    hadSLOBreachRef.current = false;
   }, [workspaceId]);
 
   useEffect(() => {
@@ -188,6 +202,20 @@ export function useOpsProductEvents({
   }, [data, emitOpsEventOnce, regressionCount]);
 
   useEffect(() => {
+    if (!data || regressionCount <= 0) return;
+    emitOpsEventOnce('change_failure_detected', 'change_failure.detected', {
+      regressions: regressionCount
+    });
+  }, [data, emitOpsEventOnce, regressionCount]);
+
+  useEffect(() => {
+    if (!data || mttrHours === null) return;
+    emitOpsEventOnce('mttr_updated', 'mttr.updated', {
+      mttr_hours: mttrHours
+    });
+  }, [data, emitOpsEventOnce, mttrHours]);
+
+  useEffect(() => {
     if (!data || unownedProjectCount <= 0) return;
     emitOpsEventOnce('owner_missing_detected', 'owner_missing_detected', {
       unowned_projects: unownedProjectCount
@@ -201,6 +229,54 @@ export function useOpsProductEvents({
       high_risk_projects: highRiskProjectCount
     });
   }, [data, emitOpsEventOnce, highRiskProjectCount, openIncidentCount]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (openIncidentCount > 0) {
+      hadOpenIncidentsRef.current = true;
+      emitOpsEventOnce('incident_opened', 'incident.opened', {
+        open_incidents: openIncidentCount
+      });
+      return;
+    }
+    if (hadOpenIncidentsRef.current) {
+      emitOpsEventOnce('incident_resolved', 'incident.resolved', {
+        resolved_incidents: data.incident_links.length
+      });
+    }
+  }, [data, emitOpsEventOnce, openIncidentCount]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (flakyRegressionCount > 0) {
+      hadFlakySignalsRef.current = true;
+      emitOpsEventOnce('test_flaky_detected', 'test.flaky_detected', {
+        flaky_signals: flakyRegressionCount
+      });
+      return;
+    }
+    if (hadFlakySignalsRef.current) {
+      emitOpsEventOnce('test_flaky_resolved', 'test.flaky_resolved', {
+        flaky_signals: 0
+      });
+    }
+  }, [data, emitOpsEventOnce, flakyRegressionCount]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (breachedSLOCount > 0) {
+      hadSLOBreachRef.current = true;
+      emitOpsEventOnce('slo_breached', 'slo.breached', {
+        breached_services: breachedSLOCount
+      });
+      return;
+    }
+    if (hadSLOBreachRef.current && data.slo_budgets.length > 0) {
+      emitOpsEventOnce('slo_recovered', 'slo.recovered', {
+        recovered_services: data.slo_budgets.length
+      });
+    }
+  }, [data, emitOpsEventOnce, breachedSLOCount]);
 
   return {
     eventActionWorking,

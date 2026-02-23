@@ -773,6 +773,10 @@ export function OpsCenterDashboard() {
                         title: newIncidentTitle.trim() || undefined,
                         status: 'open'
                       });
+                      emitOpsEvent('incident.opened', {
+                        project_id: projectId,
+                        external_issue_id: issueId
+                      });
                       setNewIncidentIssueId('');
                       setNewIncidentTitle('');
                     })
@@ -801,22 +805,43 @@ export function OpsCenterDashboard() {
                       {item.title || '-'} | {item.status}
                     </p>
                   </div>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={working}
-                    onClick={() =>
-                      void runMutationAction(async () => {
-                        await deleteIncidentLink(item.id);
-                        emitOpsEvent('duplicate_incident_merged', {
+                  <div className='flex items-center gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={working}
+                      onClick={() =>
+                        emitOpsEvent('incident.severity_changed', {
                           incident_id: item.id,
-                          external_issue_id: item.external_issue_id
-                        });
-                      })
-                    }
-                  >
-                    Delete
-                  </Button>
+                          external_issue_id: item.external_issue_id,
+                          from_status: item.status,
+                          to_severity: 'high'
+                        })
+                      }
+                    >
+                      Severity +1
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={working}
+                      onClick={() =>
+                        void runMutationAction(async () => {
+                          await deleteIncidentLink(item.id);
+                          emitOpsEvent('incident.resolved', {
+                            incident_id: item.id,
+                            external_issue_id: item.external_issue_id
+                          });
+                          emitOpsEvent('duplicate_incident_merged', {
+                            incident_id: item.id,
+                            external_issue_id: item.external_issue_id
+                          });
+                        })
+                      }
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -917,6 +942,16 @@ export function OpsCenterDashboard() {
                         warning: result.summary.warning,
                         projects_total: result.summary.projects_total
                       });
+                      emitOpsEvent('quality_gate.blocked', {
+                        blocked: result.summary.blocked,
+                        warning: result.summary.warning,
+                        projects_total: result.summary.projects_total
+                      });
+                    } else {
+                      emitOpsEvent('quality_gate.passed', {
+                        projects_total: result.summary.projects_total,
+                        pass: result.summary.pass
+                      });
                     }
                   } catch (err) {
                     setActionError(
@@ -928,6 +963,20 @@ export function OpsCenterDashboard() {
                 }}
               >
                 Run Simulation
+              </Button>
+              <Button
+                variant='outline'
+                disabled={working}
+                onClick={() =>
+                  emitOpsEvent('quality_gate.overridden', {
+                    trigger: 'manual_override',
+                    risk_high_threshold: Number(simRiskHigh) || 60,
+                    readiness_min_pct: Number(simReadinessMin) || 75,
+                    confidence_min_pct: Number(simConfidenceMin) || 70
+                  })
+                }
+              >
+                Track Override
               </Button>
 
               {preview && (
@@ -1113,18 +1162,37 @@ export function OpsCenterDashboard() {
                       newReleaseTrainEndAt,
                       'End datetime'
                     );
-                    await createReleaseTrain({
-                      workspace_id: workspaceId,
-                      project_id: Number(newReleaseTrainProjectId) || undefined,
-                      title: newReleaseTrainTitle.trim() || 'Release Train',
-                      event_type: 'release',
-                      status: 'planned',
-                      start_at: startAt,
-                      end_at: endAt
+                    const projectId = Number(newReleaseTrainProjectId) || null;
+                    const releaseTitle =
+                      newReleaseTrainTitle.trim() || 'Release Train';
+                    emitOpsEvent('deployment.started', {
+                      project_id: projectId,
+                      title: releaseTitle
                     });
+                    try {
+                      await createReleaseTrain({
+                        workspace_id: workspaceId,
+                        project_id: projectId || undefined,
+                        title: releaseTitle,
+                        event_type: 'release',
+                        status: 'planned',
+                        start_at: startAt,
+                        end_at: endAt
+                      });
+                      emitOpsEvent('deployment.succeeded', {
+                        project_id: projectId,
+                        title: releaseTitle
+                      });
+                    } catch (err) {
+                      emitOpsEvent('deployment.failed', {
+                        project_id: projectId,
+                        title: releaseTitle
+                      });
+                      throw err;
+                    }
                     emitOpsEvent('release_selected', {
-                      title: newReleaseTrainTitle.trim() || 'Release Train',
-                      project_id: Number(newReleaseTrainProjectId) || null
+                      title: releaseTitle,
+                      project_id: projectId
                     });
                   })
                 }
@@ -1155,6 +1223,10 @@ export function OpsCenterDashboard() {
                     onClick={() =>
                       void runMutationAction(async () => {
                         await deleteReleaseTrain(item.id);
+                        emitOpsEvent('deployment.rolled_back', {
+                          release_train_id: item.id,
+                          project_id: item.project_id
+                        });
                       })
                     }
                   >
@@ -1546,6 +1618,10 @@ export function OpsCenterDashboard() {
                       postmortem_title: newPostmortemTitle.trim(),
                       inferred_action_items: 1
                     });
+                    emitOpsEvent('retro.action_created', {
+                      postmortem_title: newPostmortemTitle.trim(),
+                      inferred_action_items: 1
+                    });
                   })
                 }
               >
@@ -1575,6 +1651,9 @@ export function OpsCenterDashboard() {
                       void runMutationAction(async () => {
                         await deletePostmortem(item.id);
                         emitOpsEvent('action_item_closed', {
+                          postmortem_id: item.id
+                        });
+                        emitOpsEvent('retro.action_completed', {
                           postmortem_id: item.id
                         });
                       })

@@ -560,10 +560,159 @@ export const OPS_PRODUCT_EVENT_NAMES = [
   'quality_debt_item_resolved',
   'drill_started',
   'drill_completed',
-  'drill_score_shared'
+  'drill_score_shared',
+  'deployment.started',
+  'deployment.succeeded',
+  'deployment.failed',
+  'deployment.rolled_back',
+  'quality_gate.passed',
+  'quality_gate.blocked',
+  'quality_gate.overridden',
+  'incident.opened',
+  'incident.severity_changed',
+  'incident.resolved',
+  'change_failure.detected',
+  'mttr.updated',
+  'test.flaky_detected',
+  'test.flaky_resolved',
+  'slo.breached',
+  'slo.recovered',
+  'retro.action_created',
+  'retro.action_completed'
 ] as const;
 
 export type OpsProductEventName = (typeof OPS_PRODUCT_EVENT_NAMES)[number];
+
+export const QUALITY_HUB_EVENT_SCHEMA_VERSION = 1 as const;
+
+export const QUALITY_HUB_DOMAIN_EVENT_NAMES = [
+  'deployment.started',
+  'deployment.succeeded',
+  'deployment.failed',
+  'deployment.rolled_back',
+  'quality_gate.passed',
+  'quality_gate.blocked',
+  'quality_gate.overridden',
+  'incident.opened',
+  'incident.severity_changed',
+  'incident.resolved',
+  'change_failure.detected',
+  'mttr.updated',
+  'test.flaky_detected',
+  'test.flaky_resolved',
+  'slo.breached',
+  'slo.recovered',
+  'retro.action_created',
+  'retro.action_completed'
+] as const;
+
+export type QualityHubDomainEventName =
+  (typeof QUALITY_HUB_DOMAIN_EVENT_NAMES)[number];
+
+export type QualityHubDomainEventPayloadByName = {
+  'deployment.started': {
+    deployment_id?: number | null;
+    project_id?: number | null;
+    release_version?: string | null;
+    environment?: string | null;
+  };
+  'deployment.succeeded': {
+    deployment_id?: number | null;
+    project_id?: number | null;
+    duration_minutes?: number | null;
+  };
+  'deployment.failed': {
+    deployment_id?: number | null;
+    project_id?: number | null;
+    reason?: string | null;
+  };
+  'deployment.rolled_back': {
+    deployment_id?: number | null;
+    project_id?: number | null;
+    rollback_target?: string | null;
+  };
+  'quality_gate.passed': {
+    policy_id?: number | null;
+    project_id?: number | null;
+    release_risk_score?: number | null;
+  };
+  'quality_gate.blocked': {
+    policy_id?: number | null;
+    project_id?: number | null;
+    blocking_reasons: string[];
+  };
+  'quality_gate.overridden': {
+    policy_id?: number | null;
+    project_id?: number | null;
+    overridden_by?: string | null;
+    reason?: string | null;
+  };
+  'incident.opened': {
+    incident_id?: number | null;
+    project_id?: number | null;
+    severity?: string | null;
+  };
+  'incident.severity_changed': {
+    incident_id?: number | null;
+    project_id?: number | null;
+    from?: string | null;
+    to?: string | null;
+  };
+  'incident.resolved': {
+    incident_id?: number | null;
+    project_id?: number | null;
+    mttr_hours?: number | null;
+  };
+  'change_failure.detected': {
+    project_id?: number | null;
+    deployment_id?: number | null;
+    signal?: string | null;
+  };
+  'mttr.updated': {
+    project_id?: number | null;
+    mttr_hours: number;
+  };
+  'test.flaky_detected': {
+    project_id?: number | null;
+    test_id?: string | null;
+    flakiness_score_pct?: number | null;
+  };
+  'test.flaky_resolved': {
+    project_id?: number | null;
+    test_id?: string | null;
+  };
+  'slo.breached': {
+    project_id?: number | null;
+    service_name?: string | null;
+    burn_rate?: number | null;
+  };
+  'slo.recovered': {
+    project_id?: number | null;
+    service_name?: string | null;
+    error_budget_remaining_pct?: number | null;
+  };
+  'retro.action_created': {
+    postmortem_id?: number | null;
+    action_id?: string | null;
+    title?: string | null;
+  };
+  'retro.action_completed': {
+    postmortem_id?: number | null;
+    action_id?: string | null;
+    completed_by?: string | null;
+  };
+};
+
+export type QualityHubDomainEvent<
+  Name extends QualityHubDomainEventName = QualityHubDomainEventName
+> = {
+  name: Name;
+  schema_version: typeof QUALITY_HUB_EVENT_SCHEMA_VERSION;
+  occurred_at: string;
+  workspace_id: number | null;
+  source: string;
+  payload: QualityHubDomainEventPayloadByName[Name];
+};
 
 export type OpsProductEvent = {
   id: number;

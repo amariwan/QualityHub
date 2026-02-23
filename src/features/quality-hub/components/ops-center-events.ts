@@ -60,6 +60,51 @@ export const OPS_EVENT_TODOS = [
     key: 'gameday_drill_mode',
     title: 'GameDay/Drill-Modus',
     events: ['drill_started', 'drill_completed', 'drill_score_shared']
+  },
+  {
+    key: 'deployment_lifecycle',
+    title: 'Deployment Lifecycle Events',
+    events: [
+      'deployment.started',
+      'deployment.succeeded',
+      'deployment.failed',
+      'deployment.rolled_back'
+    ]
+  },
+  {
+    key: 'quality_gate_decisions',
+    title: 'Quality Gate Decisions',
+    events: [
+      'quality_gate.passed',
+      'quality_gate.blocked',
+      'quality_gate.overridden'
+    ]
+  },
+  {
+    key: 'incident_lifecycle',
+    title: 'Incident Lifecycle Events',
+    events: [
+      'incident.opened',
+      'incident.severity_changed',
+      'incident.resolved'
+    ]
+  },
+  {
+    key: 'dora_signal_tracking',
+    title: 'DORA Signal Tracking',
+    events: [
+      'change_failure.detected',
+      'mttr.updated',
+      'test.flaky_detected',
+      'test.flaky_resolved',
+      'slo.breached',
+      'slo.recovered'
+    ]
+  },
+  {
+    key: 'retro_action_tracking',
+    title: 'Retro Action Tracker',
+    events: ['retro.action_created', 'retro.action_completed']
   }
 ] as const satisfies ReadonlyArray<{
   key: string;

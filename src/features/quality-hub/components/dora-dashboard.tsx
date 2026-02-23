@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -24,7 +25,21 @@ import {
   ChartTooltipContent
 } from '@/components/ui/chart';
 import { listWorkspaceGroups } from '@/features/quality-hub/api/client';
-import { useDoraMetrics } from '@/features/quality-hub/api/swr';
+import {
+  useDoraMetrics,
+  useOpsOverview,
+  useRiskRadar
+} from '@/features/quality-hub/api/swr';
+import {
+  buildDoraForecast,
+  buildFlakyTestRadar,
+  buildIncidentDeploymentLinks,
+  buildReleaseRiskScoreboard,
+  buildRetroActionTracker,
+  buildTeamHeatmap,
+  detectDoraAnomalies,
+  simulateQualityGate
+} from '@/features/quality-hub/insights';
 import { workspaceSlugFromGroupPath } from '@/features/quality-hub/workspace-context';
 import {
   IconRocket,
@@ -109,6 +124,31 @@ function classificationVariant(
   return CLASSIFICATION_VARIANT[c] ?? 'outline';
 }
 
+function levelVariant(
+  value: 'low' | 'medium' | 'high'
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (value === 'high') return 'destructive';
+  if (value === 'medium') return 'secondary';
+  return 'default';
+}
+
+function teamStatusVariant(
+  value: 'green' | 'yellow' | 'red'
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (value === 'red') return 'destructive';
+  if (value === 'yellow') return 'secondary';
+  return 'default';
+}
+
+function linkHealthVariant(
+  value: 'linked' | 'partial' | 'unlinked' | 'critical'
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (value === 'critical') return 'destructive';
+  if (value === 'unlinked') return 'secondary';
+  if (value === 'partial') return 'outline';
+  return 'default';
+}
+
 function ClassificationBadge({ value }: { value: Classification }) {
   return (
     <Badge variant={classificationVariant(value)} className='capitalize'>
@@ -152,6 +192,13 @@ const radarChartConfig = {
 
 export function DoraDashboard() {
   const [days, setDays] = useState<number>(30);
+  const [simRiskThreshold, setSimRiskThreshold] = useState('60');
+  const [simReadinessThreshold, setSimReadinessThreshold] = useState('75');
+  const [simConfidenceThreshold, setSimConfidenceThreshold] = useState('70');
+  const [simBlockIncidents, setSimBlockIncidents] = useState(true);
+  const [localRetroCompleted, setLocalRetroCompleted] = useState<
+    Record<string, boolean>
+  >({});
   const pathname = usePathname();
 
   const workspaceSlug = useMemo(
@@ -196,6 +243,24 @@ export function DoraDashboard() {
     workspaceId,
     days
   });
+  const weeks = useMemo(
+    () => Math.min(12, Math.max(2, Math.round(days / 7))),
+    [days]
+  );
+  const {
+    data: opsOverview,
+    error: opsOverviewError,
+    isLoading: isOpsOverviewLoading
+  } = useOpsOverview({
+    workspaceId,
+    weeks,
+    days
+  });
+  const {
+    data: riskRadar,
+    error: riskRadarError,
+    isLoading: isRiskRadarLoading
+  } = useRiskRadar(weeks, workspaceId);
 
   const errorMessage =
     workspaceErrorMessage ||
@@ -226,6 +291,107 @@ export function DoraDashboard() {
       }
     ];
   }, [data]);
+
+  const releaseRiskScoreboard = useMemo(
+    () =>
+      buildReleaseRiskScoreboard({
+        riskRadar,
+        opsOverview
+      }),
+    [opsOverview, riskRadar]
+  );
+
+  const doraForecast = useMemo(
+    () =>
+      buildDoraForecast({
+        doraMetrics: data,
+        riskRadar,
+        horizonWeeks: 2
+      }),
+    [data, riskRadar]
+  );
+
+  const doraAnomalies = useMemo(
+    () =>
+      detectDoraAnomalies({
+        doraMetrics: data,
+        riskRadar,
+        opsOverview
+      }),
+    [data, opsOverview, riskRadar]
+  );
+
+  const teamHeatmap = useMemo(
+    () =>
+      buildTeamHeatmap({
+        opsOverview,
+        riskRadar
+      }),
+    [opsOverview, riskRadar]
+  );
+
+  const flakyTestRadar = useMemo(
+    () => buildFlakyTestRadar(riskRadar),
+    [riskRadar]
+  );
+
+  const qualityGateSimulation = useMemo(
+    () =>
+      simulateQualityGate({
+        riskRadar,
+        opsOverview,
+        thresholds: {
+          max_release_risk_score: Number(simRiskThreshold) || 60,
+          min_release_readiness_pct: Number(simReadinessThreshold) || 75,
+          min_delivery_confidence_pct: Number(simConfidenceThreshold) || 70,
+          block_on_open_incidents: simBlockIncidents
+        }
+      }),
+    [
+      opsOverview,
+      riskRadar,
+      simBlockIncidents,
+      simConfidenceThreshold,
+      simReadinessThreshold,
+      simRiskThreshold
+    ]
+  );
+
+  const incidentDeploymentLinks = useMemo(
+    () =>
+      buildIncidentDeploymentLinks({
+        opsOverview,
+        riskRadar
+      }),
+    [opsOverview, riskRadar]
+  );
+
+  const retroActions = useMemo(
+    () =>
+      buildRetroActionTracker({
+        opsOverview
+      }),
+    [opsOverview]
+  );
+
+  const retroSummary = useMemo(() => {
+    const total = retroActions.length;
+    const done = retroActions.filter(
+      (item) => item.status === 'done' || localRetroCompleted[item.id]
+    ).length;
+    return {
+      total,
+      done,
+      open: Math.max(0, total - done)
+    };
+  }, [localRetroCompleted, retroActions]);
+
+  const intelligenceErrorMessages = [
+    opsOverviewError instanceof Error ? opsOverviewError.message : null,
+    riskRadarError instanceof Error ? riskRadarError.message : null
+  ].filter(Boolean) as string[];
+
+  const isIntelligenceLoading = isOpsOverviewLoading || isRiskRadarLoading;
 
   const isReady = !isResolvingWorkspace && data;
 
@@ -547,6 +713,393 @@ export function DoraDashboard() {
               </Table>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Quality Intelligence</CardTitle>
+              <CardDescription>
+                Release Risk Score, Forecasting, Anomalies, Heatmaps, Flaky
+                Radar, Gate Simulation, Incident Linking, and Retro Actions.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-3'>
+              {isIntelligenceLoading && (
+                <p className='text-muted-foreground text-sm'>
+                  Loading intelligence signals...
+                </p>
+              )}
+              {intelligenceErrorMessages.length > 0 && (
+                <p className='text-destructive text-sm'>
+                  {intelligenceErrorMessages.join(' | ')}
+                </p>
+              )}
+              {!isIntelligenceLoading &&
+                intelligenceErrorMessages.length === 0 && (
+                  <div className='grid gap-2 md:grid-cols-4'>
+                    <div className='rounded border p-2 text-sm'>
+                      Release risk rows: {releaseRiskScoreboard.length}
+                    </div>
+                    <div className='rounded border p-2 text-sm'>
+                      Anomalies: {doraAnomalies.length}
+                    </div>
+                    <div className='rounded border p-2 text-sm'>
+                      Flaky projects: {flakyTestRadar.length}
+                    </div>
+                    <div className='rounded border p-2 text-sm'>
+                      Retro actions: {retroSummary.total}
+                    </div>
+                  </div>
+                )}
+            </CardContent>
+          </Card>
+
+          <div className='grid gap-4 xl:grid-cols-2'>
+            <Card>
+              <CardHeader>
+                <CardTitle>1. Release Risk Score</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2'>
+                {releaseRiskScoreboard.length === 0 && (
+                  <p className='text-muted-foreground text-sm'>
+                    No release risk score data available.
+                  </p>
+                )}
+                {releaseRiskScoreboard.slice(0, 8).map((item) => (
+                  <div
+                    key={item.project_id}
+                    className='flex items-center justify-between rounded border p-2'
+                  >
+                    <div>
+                      <p className='text-sm font-medium'>{item.project}</p>
+                      <p className='text-muted-foreground text-xs'>
+                        tests {item.factors.test_failure_signals} | incidents{' '}
+                        {item.factors.open_incidents} | hotfixes{' '}
+                        {item.factors.hotfix_history_signals} | ownership{' '}
+                        {item.factors.ownership_gap ? 'gap' : 'ok'}
+                      </p>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                      <span className='text-sm font-semibold'>
+                        {item.score}
+                      </span>
+                      <Badge variant={levelVariant(item.level)}>
+                        {item.level}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>2. DORA Forecast (2 Weeks)</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2'>
+                {!doraForecast && (
+                  <p className='text-muted-foreground text-sm'>
+                    Not enough data for forecast.
+                  </p>
+                )}
+                {doraForecast && (
+                  <>
+                    <div className='grid gap-2 md:grid-cols-2'>
+                      <div className='rounded border p-2 text-sm'>
+                        Outlook: <strong>{doraForecast.outlook}</strong>
+                      </div>
+                      <div className='rounded border p-2 text-sm'>
+                        Confidence:{' '}
+                        <strong>
+                          {doraForecast.confidence_pct.toFixed(1)}%
+                        </strong>
+                      </div>
+                      <div className='rounded border p-2 text-sm'>
+                        Deployments/week:{' '}
+                        <strong>
+                          {doraForecast.projected_deployments_per_week.toFixed(
+                            2
+                          )}
+                        </strong>
+                      </div>
+                      <div className='rounded border p-2 text-sm'>
+                        CFR:{' '}
+                        <strong>
+                          {doraForecast.projected_change_failure_rate_pct.toFixed(
+                            1
+                          )}
+                          %
+                        </strong>
+                      </div>
+                      <div className='rounded border p-2 text-sm'>
+                        Lead time:{' '}
+                        <strong>
+                          {doraForecast.projected_lead_time_hours === null
+                            ? '-'
+                            : `${doraForecast.projected_lead_time_hours.toFixed(1)}h`}
+                        </strong>
+                      </div>
+                      <div className='rounded border p-2 text-sm'>
+                        MTTR:{' '}
+                        <strong>
+                          {doraForecast.projected_mttr_hours === null
+                            ? '-'
+                            : `${doraForecast.projected_mttr_hours.toFixed(1)}h`}
+                        </strong>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>3. Anomaly Detection</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2'>
+                {doraAnomalies.length === 0 && (
+                  <p className='text-muted-foreground text-sm'>
+                    No major anomalies detected.
+                  </p>
+                )}
+                {doraAnomalies.map((item) => (
+                  <div key={item.id} className='rounded border p-2'>
+                    <div className='flex items-center justify-between gap-2'>
+                      <p className='text-sm font-medium'>{item.title}</p>
+                      <Badge variant={levelVariant(item.severity)}>
+                        {item.severity}
+                      </Badge>
+                    </div>
+                    <p className='text-muted-foreground text-xs'>
+                      {item.description}
+                    </p>
+                    <p className='text-xs'>{item.recommendation}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>4. Team Heatmap</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2'>
+                {teamHeatmap.length === 0 && (
+                  <p className='text-muted-foreground text-sm'>
+                    No team heatmap data available.
+                  </p>
+                )}
+                {teamHeatmap.slice(0, 10).map((item) => (
+                  <div
+                    key={item.team_id}
+                    className='flex items-center justify-between rounded border p-2'
+                  >
+                    <div>
+                      <p className='text-sm font-medium'>{item.team}</p>
+                      <p className='text-muted-foreground text-xs'>
+                        load {item.load_pct.toFixed(1)}% | {item.project_count}{' '}
+                        projects
+                      </p>
+                    </div>
+                    <Badge variant={teamStatusVariant(item.team_status)}>
+                      {item.quality_label}
+                    </Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>5. Flaky Test Radar</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2'>
+                {flakyTestRadar.length === 0 && (
+                  <p className='text-muted-foreground text-sm'>
+                    No flaky-test signals available.
+                  </p>
+                )}
+                {flakyTestRadar.slice(0, 8).map((item) => (
+                  <div
+                    key={item.project_id}
+                    className='flex items-center justify-between rounded border p-2'
+                  >
+                    <div>
+                      <p className='text-sm font-medium'>{item.project}</p>
+                      <p className='text-muted-foreground text-xs'>
+                        flakiness {item.flakiness_score_pct.toFixed(1)}% |
+                        delivery {item.delivery_confidence_pct.toFixed(1)}%
+                      </p>
+                    </div>
+                    <Badge variant={levelVariant(item.severity)}>
+                      {item.severity}
+                    </Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>6. Quality Gate Simulator</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-3'>
+                <div className='grid gap-2 md:grid-cols-3'>
+                  <Input
+                    value={simRiskThreshold}
+                    onChange={(event) =>
+                      setSimRiskThreshold(event.target.value)
+                    }
+                    placeholder='Max release risk'
+                  />
+                  <Input
+                    value={simReadinessThreshold}
+                    onChange={(event) =>
+                      setSimReadinessThreshold(event.target.value)
+                    }
+                    placeholder='Min readiness'
+                  />
+                  <Input
+                    value={simConfidenceThreshold}
+                    onChange={(event) =>
+                      setSimConfidenceThreshold(event.target.value)
+                    }
+                    placeholder='Min confidence'
+                  />
+                </div>
+                <Button
+                  variant={simBlockIncidents ? 'default' : 'outline'}
+                  onClick={() => setSimBlockIncidents((prev) => !prev)}
+                >
+                  Block on open incidents: {simBlockIncidents ? 'On' : 'Off'}
+                </Button>
+                <div className='grid gap-2 md:grid-cols-4'>
+                  <div className='rounded border p-2 text-sm'>
+                    Total: {qualityGateSimulation.summary.projects_total}
+                  </div>
+                  <div className='rounded border p-2 text-sm'>
+                    Blocked: {qualityGateSimulation.summary.blocked}
+                  </div>
+                  <div className='rounded border p-2 text-sm'>
+                    Warning: {qualityGateSimulation.summary.warning}
+                  </div>
+                  <div className='rounded border p-2 text-sm'>
+                    Pass: {qualityGateSimulation.summary.pass}
+                  </div>
+                </div>
+                {qualityGateSimulation.decisions.slice(0, 6).map((item) => (
+                  <div
+                    key={item.project_id}
+                    className='flex items-center justify-between rounded border p-2'
+                  >
+                    <div>
+                      <p className='text-sm font-medium'>{item.project}</p>
+                      <p className='text-muted-foreground text-xs'>
+                        risk {item.release_risk_score.toFixed(1)} | readiness{' '}
+                        {item.release_readiness_pct.toFixed(1)}% | confidence{' '}
+                        {item.delivery_confidence_pct.toFixed(1)}%
+                      </p>
+                    </div>
+                    <Badge
+                      variant={levelVariant(
+                        item.status === 'pass'
+                          ? 'low'
+                          : item.status === 'warning'
+                            ? 'medium'
+                            : 'high'
+                      )}
+                    >
+                      {item.status}
+                    </Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>7. Incident ↔ Deployment Linker</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2'>
+                {incidentDeploymentLinks.length === 0 && (
+                  <p className='text-muted-foreground text-sm'>
+                    No incident links available.
+                  </p>
+                )}
+                {incidentDeploymentLinks.slice(0, 10).map((item) => (
+                  <div key={item.incident_id} className='rounded border p-2'>
+                    <div className='flex items-center justify-between gap-2'>
+                      <p className='text-sm font-medium'>
+                        {item.incident_external_id} · {item.project}
+                      </p>
+                      <Badge variant={linkHealthVariant(item.link_health)}>
+                        {item.link_health}
+                      </Badge>
+                    </div>
+                    <p className='text-muted-foreground text-xs'>
+                      pipeline {item.linked_pipeline || '-'} | release train{' '}
+                      {item.linked_release_train || '-'} | risk{' '}
+                      {item.release_risk_level}
+                    </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>8. Retro Action Tracker</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-3'>
+                <div className='grid gap-2 md:grid-cols-3'>
+                  <div className='rounded border p-2 text-sm'>
+                    Total: {retroSummary.total}
+                  </div>
+                  <div className='rounded border p-2 text-sm'>
+                    Open: {retroSummary.open}
+                  </div>
+                  <div className='rounded border p-2 text-sm'>
+                    Done: {retroSummary.done}
+                  </div>
+                </div>
+                {retroActions.length === 0 && (
+                  <p className='text-muted-foreground text-sm'>
+                    No retro actions available.
+                  </p>
+                )}
+                {retroActions.slice(0, 10).map((item) => {
+                  const isDone =
+                    item.status === 'done' ||
+                    Boolean(localRetroCompleted[item.id]);
+                  return (
+                    <div
+                      key={item.id}
+                      className='flex items-center justify-between gap-3 rounded border p-2'
+                    >
+                      <div>
+                        <p className='text-sm font-medium'>{item.title}</p>
+                        <p className='text-muted-foreground text-xs'>
+                          {item.postmortem_title}
+                        </p>
+                      </div>
+                      <Button
+                        size='sm'
+                        variant={isDone ? 'default' : 'outline'}
+                        onClick={() =>
+                          setLocalRetroCompleted((prev) => ({
+                            ...prev,
+                            [item.id]: !prev[item.id]
+                          }))
+                        }
+                      >
+                        {isDone ? 'Done' : 'Mark done'}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>
